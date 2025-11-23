@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-import { Send, Users, LogOut, Phone, Image as ImageIcon, X, Edit2 } from 'lucide-react';
+import { Send, Users, LogOut, Phone, Image as ImageIcon, X, Edit2, Wifi, WifiOff, RefreshCw, Clock } from 'lucide-react';
 
-const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sendTyping, onChangeRoom }) => {
+const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sendTyping, onChangeRoom, connectionStatus }) => {
     const [newMessage, setNewMessage] = useState('');
     const [selectedImage, setSelectedImage] = useState(null);
     const [replyingTo, setReplyingTo] = useState(null);
@@ -12,6 +12,7 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
     const typingTimeoutRef = useRef(null);
     const messagesEndRef = useRef(null);
     const messageInputRef = useRef(null);
+    const wakeLockRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -52,6 +53,45 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
         } else {
             console.log('Notification API not available in this browser');
         }
+    }, []);
+
+    // Wake Lock for mobile devices
+    useEffect(() => {
+        const requestWakeLock = async () => {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLockRef.current = await navigator.wakeLock.request('screen');
+                    console.log('Wake lock acquired');
+
+                    wakeLockRef.current.addEventListener('release', () => {
+                        console.log('Wake lock released');
+                    });
+                } catch (err) {
+                    console.error('Wake lock error:', err);
+                }
+            } else {
+                console.log('Wake Lock API not supported');
+            }
+        };
+
+        requestWakeLock();
+
+        // Re-acquire wake lock when page becomes visible
+        const handleVisibilityChange = () => {
+            if (wakeLockRef.current !== null && document.visibilityState === 'visible') {
+                requestWakeLock();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            if (wakeLockRef.current) {
+                wakeLockRef.current.release();
+                wakeLockRef.current = null;
+            }
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     const handleSend = (e) => {
@@ -189,7 +229,17 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
                                         {peer.status === 'away' && <span title="Away">😴</span>}
                                     </span>
                                 </div>
-                                <span className={`ml-auto w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-yellow-500'}`} title={peer.connected ? 'Connected' : 'Connecting...'}></span>
+                                <span className={`ml-auto flex items-center gap-1 ${peer.reconnecting ? 'text-yellow-500' :
+                                    peer.connected ? 'text-green-500' : 'text-red-500'
+                                    }`}>
+                                    {peer.reconnecting && <RefreshCw className="w-3 h-3 animate-spin" />}
+                                    <span className={`w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' :
+                                        peer.reconnecting ? 'bg-yellow-500' : 'bg-red-500'
+                                        }`} title={
+                                            peer.connected ? 'Connected' :
+                                                peer.reconnecting ? 'Reconnecting...' : 'Disconnected'
+                                        }></span>
+                                </span>
                             </div>
                         ))}
                         {peers.length === 0 && (
@@ -240,6 +290,20 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
 
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
+                {/* Connection Status Banner */}
+                {connectionStatus === 'disconnected' && (
+                    <div className="bg-red-600 text-white px-4 py-2 text-sm flex items-center justify-center gap-2">
+                        <WifiOff className="w-4 h-4" />
+                        <span>Connection lost. Reconnecting...</span>
+                    </div>
+                )}
+                {connectionStatus === 'connecting' && (
+                    <div className="bg-yellow-600 text-white px-4 py-2 text-sm flex items-center justify-center gap-2">
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <span>Connecting to server...</span>
+                    </div>
+                )}
+
                 {/* Mobile Header */}
                 <div className="md:hidden bg-gray-800 p-3 border-b border-gray-700 flex items-center justify-between shadow-md">
                     <div className="flex items-center gap-2 min-w-0">
@@ -292,6 +356,14 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
                                     : 'bg-gray-700 text-gray-100 rounded-bl-none'
                                     }`}>
                                     {!isMe && <p className="text-xs text-blue-300 mb-1 font-bold">{msg.sender}</p>}
+
+                                    {/* Pending indicator */}
+                                    {msg.pending && isMe && (
+                                        <div className="flex items-center gap-1 text-xs text-yellow-400 mb-2">
+                                            <Clock className="w-3 h-3" />
+                                            <span>Pending delivery...</span>
+                                        </div>
+                                    )}
 
                                     {/* Reply Context */}
                                     {msg.replyTo && (

@@ -9,7 +9,7 @@ function App() {
   const [username, setUsername] = useState(() => localStorage.getItem('chat_username') || '');
 
   // Only initialize hook when joined
-  const { peers, messages, sendMessage, sendTyping } = useWebRTC(joined ? roomID : null, joined ? username : null);
+  const { peers, messages, sendMessage, sendTyping, connectionStatus } = useWebRTC(joined ? roomID : null, joined ? username : null);
 
   const handleJoin = (room, user) => {
     setRoomID(room);
@@ -51,6 +51,7 @@ function App() {
           peers={peers}
           onLeave={handleLeave}
           onChangeRoom={handleChangeRoom}
+          connectionStatus={connectionStatus}
         />
       )}
     </>
