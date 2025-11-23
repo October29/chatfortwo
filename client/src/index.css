@@ -1,3 +1,22 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Mobile PWA Optimizations */
+body {
+  overscroll-behavior-y: contain; /* Prevent pull-to-refresh */
+  -webkit-tap-highlight-color: transparent; /* Remove tap highlight on iOS */
+  -webkit-touch-callout: none; /* Disable callout on long press */
+  user-select: none; /* Prevent text selection on mobile */
+}
+
+/* Allow text selection in input fields and message content */
+input, textarea, [contenteditable] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.break-words {
+  user-select: text;
+  -webkit-user-select: text;
+}
