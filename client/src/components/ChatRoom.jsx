@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-import { Send, Users, LogOut, Phone, Image as ImageIcon, X } from 'lucide-react';
+import { Send, Users, LogOut, Phone, Image as ImageIcon, X, Edit2 } from 'lucide-react';
 
-const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sendTyping }) => {
+const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sendTyping, onChangeRoom }) => {
     const [newMessage, setNewMessage] = useState('');
     const [selectedImage, setSelectedImage] = useState(null);
     const [replyingTo, setReplyingTo] = useState(null);
     const [showMobilePeers, setShowMobilePeers] = useState(false);
+    const [showRoomChanger, setShowRoomChanger] = useState(false);
+    const [newRoomInput, setNewRoomInput] = useState('');
     const typingTimeoutRef = useRef(null);
     const messagesEndRef = useRef(null);
+    const messageInputRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -28,8 +31,26 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
     }, [messages]);
 
     useEffect(() => {
-        if (Notification.permission === 'default') {
-            Notification.requestPermission();
+        if ('Notification' in window) {
+            console.log('Notification API available');
+            console.log('Current permission:', Notification.permission);
+
+            if (Notification.permission === 'default') {
+                Notification.requestPermission().then(permission => {
+                    console.log('Permission result:', permission);
+                    if (permission === 'granted') {
+                        console.log('Notifications enabled successfully');
+                    } else {
+                        console.log('Notifications denied or dismissed');
+                    }
+                });
+            } else if (Notification.permission === 'granted') {
+                console.log('Notifications already granted');
+            } else {
+                console.log('Notifications blocked');
+            }
+        } else {
+            console.log('Notification API not available in this browser');
         }
     }, []);
 
@@ -68,8 +89,53 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
         }
     };
 
+    const handleRoomChangeSubmit = (e) => {
+        e.preventDefault();
+        if (newRoomInput.trim() && newRoomInput !== roomID) {
+            onChangeRoom(newRoomInput.trim());
+            setShowRoomChanger(false);
+        }
+    };
+
     return (
         <div className="flex h-screen bg-gray-900 text-white overflow-hidden relative">
+            {/* Room Changer Modal */}
+            {showRoomChanger && (
+                <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+                    <div className="bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+                        <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                            <Edit2 className="w-5 h-5 text-blue-500" />
+                            Change Room
+                        </h3>
+                        <form onSubmit={handleRoomChangeSubmit}>
+                            <input
+                                type="text"
+                                value={newRoomInput}
+                                onChange={(e) => setNewRoomInput(e.target.value)}
+                                placeholder="Enter new room ID"
+                                className="w-full bg-gray-700 text-white rounded-lg p-3 mb-4 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                                autoFocus
+                            />
+                            <div className="flex justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRoomChanger(false)}
+                                    className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-bold"
+                                >
+                                    Switch Room
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Image Modal */}
             {selectedImage && (
                 <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4">
@@ -83,7 +149,7 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
                         <img src={selectedImage} alt="Full size" className="max-w-full max-h-[80vh] object-contain rounded-lg" />
                         <a
                             href={selectedImage}
-                            download={`secure-chat-image-${Date.now()}.png`}
+                            download={`secure - chat - image - ${Date.now()}.png`}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-full font-bold transition-colors"
                         >
                             Download Image
@@ -94,9 +160,17 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
             {/* Sidebar (Desktop) */}
             <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col hidden md:flex">
                 <div className="p-4 border-b border-gray-700">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <h2
+                        className="text-xl font-bold text-white flex items-center gap-2 cursor-pointer hover:text-blue-400 transition-colors group"
+                        onClick={() => {
+                            setNewRoomInput(roomID);
+                            setShowRoomChanger(true);
+                        }}
+                        title="Click to change room"
+                    >
                         <Users className="w-6 h-6 text-blue-500" />
                         Room: {roomID}
+                        <Edit2 className="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity" />
                     </h2>
                     <p className="text-sm text-gray-400 mt-1">Logged in as: <span className="text-blue-400">{username}</span></p>
                 </div>
@@ -155,7 +229,7 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
                                             {peer.status === 'away' && <span title="Away">😴</span>}
                                         </span>
                                     </div>
-                                    <span className={`ml-auto w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-yellow-500'}`} title={peer.connected ? 'Connected' : 'Connecting...'}></span>
+                                    <span className={`ml - auto w - 2 h - 2 rounded - full ${peer.connected ? 'bg-green-500' : 'bg-yellow-500'} `} title={peer.connected ? 'Connected' : 'Connecting...'}></span>
                                 </div>
                             ))}
                             {peers.length === 0 && <p className="text-gray-500 text-sm italic">No other peers connected.</p>}
@@ -172,8 +246,14 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
                         <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-bold shrink-0">
                             {roomID[0].toUpperCase()}
                         </div>
-                        <div className="min-w-0">
-                            <h2 className="font-bold text-sm truncate">Room: {roomID}</h2>
+                        <div className="min-w-0 cursor-pointer" onClick={() => {
+                            setNewRoomInput(roomID);
+                            setShowRoomChanger(true);
+                        }}>
+                            <h2 className="font-bold text-sm truncate flex items-center gap-1">
+                                Room: {roomID}
+                                <Edit2 className="w-3 h-3 opacity-50" />
+                            </h2>
                             {peers.length === 1 ? (
                                 <p className="text-xs text-green-400 truncate flex items-center gap-1">
                                     ● {peers[0].username || 'Unknown'}
@@ -242,12 +322,15 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
 
                                     <div className="flex items-center justify-end gap-2 mt-1">
                                         <button
-                                            onClick={() => setReplyingTo(msg)}
+                                            onClick={() => {
+                                                setReplyingTo(msg);
+                                                messageInputRef.current?.focus();
+                                            }}
                                             className="opacity-0 group-hover:opacity-100 transition-opacity text-[10px] text-gray-300 hover:text-white"
                                         >
                                             Reply
                                         </button>
-                                        <p className={`text-[10px] ${isMe ? 'text-blue-200' : 'text-gray-400'}`}>
+                                        <p className={`text - [10px] ${isMe ? 'text-blue-200' : 'text-gray-400'} `}>
                                             {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                         </p>
                                     </div>
@@ -299,6 +382,7 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sen
                             />
                         </label>
                         <input
+                            ref={messageInputRef}
                             type="text"
                             value={newMessage}
                             onChange={handleInputChange}

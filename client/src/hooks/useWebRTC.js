@@ -178,13 +178,40 @@ const useWebRTC = (roomID, username) => {
                 // Trigger notification if backgrounded or not focused
                 if ((document.hidden || !document.hasFocus()) && Notification.permission === 'granted') {
                     console.log('Triggering notification for:', parsed.value.sender);
+                    console.log('Notification permission:', Notification.permission);
+                    console.log('Document hidden:', document.hidden);
+                    console.log('Has focus:', document.hasFocus());
+
                     try {
-                        new Notification(`New message from ${parsed.value.sender}`, {
+                        const notification = new Notification(`New message from ${parsed.value.sender}`, {
                             body: parsed.value.type === 'image' ? 'Sent an image' : parsed.value.content,
-                            icon: '/vite.svg'
+                            icon: '/vite.svg',
+                            badge: '/vite.svg',
+                            tag: 'chat-message', // Reuse notification tag
+                            requireInteraction: false,
+                            silent: false
                         });
+
+                        // Add click handler to focus the window
+                        notification.onclick = () => {
+                            window.focus();
+                            notification.close();
+                        };
+
+                        console.log('Notification created successfully');
+
+                        // Vibrate on mobile if supported
+                        if ('vibrate' in navigator) {
+                            navigator.vibrate([200, 100, 200]);
+                        }
                     } catch (err) {
                         console.error('Notification error:', err);
+                        console.error('Error details:', err.message, err.stack);
+
+                        // Fallback: try vibration only
+                        if ('vibrate' in navigator) {
+                            navigator.vibrate([200, 100, 200]);
+                        }
                     }
                 }
             }
