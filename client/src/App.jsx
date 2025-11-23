@@ -9,7 +9,7 @@ function App() {
   const [username, setUsername] = useState('');
 
   // Only initialize hook when joined
-  const { peers, messages, sendMessage } = useWebRTC(joined ? roomID : null, joined ? username : null);
+  const { peers, messages, sendMessage, sendTyping } = useWebRTC(joined ? roomID : null, joined ? username : null);
 
   const handleJoin = (room, user) => {
     setRoomID(room);
@@ -29,11 +29,12 @@ function App() {
       {!joined ? (
         <JoinRoom onJoin={handleJoin} />
       ) : (
-        <ChatRoom 
-          roomID={roomID} 
-          username={username} 
-          messages={messages} 
+        <ChatRoom
+          roomID={roomID}
+          username={username}
+          messages={messages}
           sendMessage={sendMessage}
+          sendTyping={sendTyping}
           peers={peers}
           onLeave={handleLeave}
         />

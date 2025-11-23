@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 
 import { Send, Users, LogOut, Phone, Image as ImageIcon, X } from 'lucide-react';
 
-const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) => {
+const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave, sendTyping }) => {
     const [newMessage, setNewMessage] = useState('');
     const [selectedImage, setSelectedImage] = useState(null);
     const [replyingTo, setReplyingTo] = useState(null);
+    const [showMobilePeers, setShowMobilePeers] = useState(false);
+    const typingTimeoutRef = useRef(null);
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -25,13 +27,33 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
         scrollToBottom();
     }, [messages]);
 
+    useEffect(() => {
+        if (Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }, []);
+
     const handleSend = (e) => {
         e.preventDefault();
         if (newMessage.trim()) {
             sendMessage(newMessage, 'text', replyingTo);
             setNewMessage('');
             setReplyingTo(null);
+            sendTyping(false);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
         }
+    };
+
+    const handleInputChange = (e) => {
+        setNewMessage(e.target.value);
+
+        sendTyping(true);
+
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+        typingTimeoutRef.current = setTimeout(() => {
+            sendTyping(false);
+        }, 2000);
     };
 
     const handleFileSelect = (e) => {
@@ -69,25 +91,30 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
                     </div>
                 </div>
             )}
-            {/* Sidebar */}
+            {/* Sidebar (Desktop) */}
             <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col hidden md:flex">
                 <div className="p-4 border-b border-gray-700">
-                    <h2 className="text-xl font-bold flex items-center gap-2">
-                        <Users className="w-5 h-5 text-blue-400" />
+                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                        <Users className="w-6 h-6 text-blue-500" />
                         Room: {roomID}
                     </h2>
-                    <p className="text-sm text-gray-400 mt-1">Logged in as: <span className="text-blue-300">{username}</span></p>
+                    <p className="text-sm text-gray-400 mt-1">Logged in as: <span className="text-blue-400">{username}</span></p>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-4">
                     <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Online Peers ({peers.length})</h3>
                     <div className="space-y-3">
-                        {peers.map((peer, index) => (
-                            <div key={index} className="flex items-center gap-3 bg-gray-700/50 p-2 rounded-lg">
-                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold text-sm">
+                        {peers.map((peer) => (
+                            <div key={peer.peerID} className="flex items-center gap-2 bg-gray-700 p-2 rounded">
+                                <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold">
                                     {peer.username ? peer.username[0].toUpperCase() : '?'}
                                 </div>
-                                <span className="text-sm font-medium">{peer.username || 'Unknown'}</span>
+                                <div className="flex flex-col">
+                                    <span className="text-sm font-medium flex items-center gap-1">
+                                        {peer.username || 'Unknown'}
+                                        {peer.status === 'away' && <span title="Away">😴</span>}
+                                    </span>
+                                </div>
                                 <span className={`ml-auto w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-yellow-500'}`} title={peer.connected ? 'Connected' : 'Connecting...'}></span>
                             </div>
                         ))}
@@ -100,7 +127,7 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
                 <div className="p-4 border-t border-gray-700">
                     <button
                         onClick={onLeave}
-                        className="w-full flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 py-2 rounded-lg transition-colors"
+                        className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-2 rounded-lg transition-colors"
                     >
                         <LogOut className="w-4 h-4" />
                         Leave Room
@@ -108,14 +135,72 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
                 </div>
             </div>
 
+            {/* Mobile Peer List Modal */}
+            {showMobilePeers && (
+                <div className="fixed inset-0 z-40 bg-black/50 md:hidden flex items-center justify-center p-4" onClick={() => setShowMobilePeers(false)}>
+                    <div className="bg-gray-800 rounded-lg w-full max-w-sm p-4 shadow-xl" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold">Online Peers ({peers.length})</h3>
+                            <button onClick={() => setShowMobilePeers(false)}><X className="w-6 h-6" /></button>
+                        </div>
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                            {peers.map((peer) => (
+                                <div key={peer.peerID} className="flex items-center gap-2 bg-gray-700 p-2 rounded">
+                                    <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center font-bold">
+                                        {peer.username ? peer.username[0].toUpperCase() : '?'}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-medium flex items-center gap-1">
+                                            {peer.username || 'Unknown'}
+                                            {peer.status === 'away' && <span title="Away">😴</span>}
+                                        </span>
+                                    </div>
+                                    <span className={`ml-auto w-2 h-2 rounded-full ${peer.connected ? 'bg-green-500' : 'bg-yellow-500'}`} title={peer.connected ? 'Connected' : 'Connecting...'}></span>
+                                </div>
+                            ))}
+                            {peers.length === 0 && <p className="text-gray-500 text-sm italic">No other peers connected.</p>}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Main Chat Area */}
             <div className="flex-1 flex flex-col min-w-0">
-                {/* Header (Mobile only mostly) */}
-                <div className="md:hidden p-4 bg-gray-800 border-b border-gray-700 flex justify-between items-center">
-                    <h2 className="font-bold">Room: {roomID}</h2>
-                    <button onClick={onLeave}><LogOut className="w-5 h-5 text-red-400" /></button>
+                {/* Mobile Header */}
+                <div className="md:hidden bg-gray-800 p-3 border-b border-gray-700 flex items-center justify-between shadow-md">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center font-bold shrink-0">
+                            {roomID[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                            <h2 className="font-bold text-sm truncate">Room: {roomID}</h2>
+                            {peers.length === 1 ? (
+                                <p className="text-xs text-green-400 truncate flex items-center gap-1">
+                                    ● {peers[0].username || 'Unknown'}
+                                    {peers[0].status === 'away' && '😴'}
+                                </p>
+                            ) : (
+                                <p className="text-xs text-gray-400">{peers.length} peers online</p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                        {peers.length > 1 && (
+                            <button
+                                onClick={() => setShowMobilePeers(true)}
+                                className="p-2 bg-gray-700 rounded-full hover:bg-gray-600"
+                            >
+                                <Users className="w-5 h-5" />
+                            </button>
+                        )}
+                        <button
+                            onClick={onLeave}
+                            className="p-2 bg-red-600/20 text-red-400 rounded-full hover:bg-red-600/30"
+                        >
+                            <LogOut className="w-5 h-5" />
+                        </button>
+                    </div>
                 </div>
-
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-900">
                     {messages.map((msg, index) => {
@@ -175,6 +260,18 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
 
                 {/* Input Area */}
                 <div className="p-4 bg-gray-800 border-t border-gray-700">
+                    {/* Typing Indicator */}
+                    <div className="h-6 text-xs text-gray-400 pl-4 flex items-center gap-1">
+                        {peers.some(p => p.isTyping) && (
+                            <>
+                                <span className="animate-pulse">💬</span>
+                                <span>
+                                    {peers.filter(p => p.isTyping).map(p => p.username).join(', ')} {peers.filter(p => p.isTyping).length === 1 ? 'is' : 'are'} typing...
+                                </span>
+                            </>
+                        )}
+                    </div>
+
                     {replyingTo && (
                         <div className="flex items-center justify-between bg-gray-700 p-2 rounded-t-lg mb-2 border-l-4 border-blue-500">
                             <div className="flex items-center gap-2 text-sm">
@@ -192,8 +289,8 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
                         </div>
                     )}
                     <form onSubmit={handleSend} className="flex gap-2 max-w-4xl mx-auto items-center">
-                        <label className="cursor-pointer p-3 text-gray-400 hover:text-blue-400 transition-colors">
-                            <ImageIcon className="w-6 h-6" />
+                        <label className="cursor-pointer p-2 md:p-3 text-gray-400 hover:text-blue-400 transition-colors shrink-0">
+                            <ImageIcon className="w-5 h-5 md:w-6 md:h-6" />
                             <input
                                 type="file"
                                 accept="image/*"
@@ -204,16 +301,16 @@ const ChatRoom = ({ roomID, username, messages, sendMessage, peers, onLeave }) =
                         <input
                             type="text"
                             value={newMessage}
-                            onChange={(e) => setNewMessage(e.target.value)}
+                            onChange={handleInputChange}
                             placeholder="Type a message..."
-                            className="flex-1 bg-gray-700 border-none text-white rounded-full px-6 py-3 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                            className="flex-1 bg-gray-700 border-none text-white rounded-full px-4 py-2 md:px-6 md:py-3 text-sm md:text-base focus:ring-2 focus:ring-blue-500 focus:outline-none min-w-0"
                         />
                         <button
                             type="submit"
                             disabled={!newMessage.trim()}
-                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-3 rounded-full transition-colors"
+                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white p-2 md:p-3 rounded-full transition-colors shrink-0"
                         >
-                            <Send className="w-5 h-5" />
+                            <Send className="w-4 h-4 md:w-5 md:h-5" />
                         </button>
                     </form>
                 </div>

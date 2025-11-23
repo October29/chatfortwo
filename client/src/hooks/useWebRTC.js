@@ -34,9 +34,11 @@ const useWebRTC = (roomID, username) => {
                 peersRef.current.push({
                     peerID: userID,
                     peer,
-                    username: ''
+                    username: '',
+                    status: 'active',
+                    isTyping: false
                 });
-                peers.push({ peerID: userID, username: '', connected: false });
+                peers.push({ peerID: userID, username: '', connected: false, status: 'active', isTyping: false });
             });
             setPeers(peers);
         });
@@ -46,9 +48,11 @@ const useWebRTC = (roomID, username) => {
             peersRef.current.push({
                 peerID: payload.callerID,
                 peer,
-                username: ''
+                username: '',
+                status: 'active',
+                isTyping: false
             });
-            setPeers(prev => [...prev, { peerID: payload.callerID, username: '', connected: false }]);
+            setPeers(prev => [...prev, { peerID: payload.callerID, username: '', connected: false, status: 'active', isTyping: false }]);
         });
 
         socketRef.current.on('receiving returned signal', (payload) => {
@@ -154,12 +158,35 @@ const useWebRTC = (roomID, username) => {
                     peerObj.username = parsed.value;
                 }
                 setPeers(prev => prev.map(p => p.peerID === peerID ? { ...p, username: parsed.value } : p));
+            } else if (parsed.type === 'status') {
+                // Update peer status
+                const peerObj = peersRef.current.find(p => p.peerID === peerID);
+                if (peerObj) {
+                    peerObj.status = parsed.value;
+                }
+                setPeers(prev => prev.map(p => p.peerID === peerID ? { ...p, status: parsed.value } : p));
+            } else if (parsed.type === 'typing') {
+                // Update peer typing status
+                setPeers(prev => prev.map(p => p.peerID === peerID ? { ...p, isTyping: parsed.value } : p));
             } else if (parsed.type === 'message') {
                 // Save to DB
                 db.messages.add({
                     ...parsed.value,
                     roomID // Add roomID so we can filter
                 });
+
+                // Trigger notification if backgrounded or not focused
+                if ((document.hidden || !document.hasFocus()) && Notification.permission === 'granted') {
+                    console.log('Triggering notification for:', parsed.value.sender);
+                    try {
+                        new Notification(`New message from ${parsed.value.sender}`, {
+                            body: parsed.value.type === 'image' ? 'Sent an image' : parsed.value.content,
+                            icon: '/vite.svg'
+                        });
+                    } catch (err) {
+                        console.error('Notification error:', err);
+                    }
+                }
             }
         } catch (e) {
             console.error('Error parsing data:', e);
@@ -242,7 +269,58 @@ const useWebRTC = (roomID, username) => {
         });
     };
 
-    return { peers, messages, sendMessage };
+    const sendStatus = (status) => {
+        peersRef.current.forEach(p => {
+            try {
+                p.peer.send(JSON.stringify({ type: 'status', value: status }));
+            } catch (e) {
+                console.error('Error sending status:', e);
+            }
+        });
+    };
+
+    const sendTyping = (isTyping) => {
+        peersRef.current.forEach(p => {
+            try {
+                p.peer.send(JSON.stringify({ type: 'typing', value: isTyping }));
+            } catch (e) {
+                console.error('Error sending typing status:', e);
+            }
+        });
+    };
+
+    // Track visibility/focus
+    useEffect(() => {
+        const handleFocus = () => {
+            console.log('Window focused');
+            sendStatus('active');
+        };
+
+        const handleBlur = () => {
+            console.log('Window blurred');
+            sendStatus('away');
+        };
+
+        window.addEventListener('focus', handleFocus);
+        window.addEventListener('blur', handleBlur);
+
+        // Also handle visibility change as a backup
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                console.log('Document hidden');
+                sendStatus('away');
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', handleFocus);
+            window.removeEventListener('blur', handleBlur);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [peers]); // Re-bind when peers change to ensure we send to all
+
+    return { peers, messages, sendMessage, sendTyping };
 };
 
 export default useWebRTC;
