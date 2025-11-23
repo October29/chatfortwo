@@ -243,8 +243,19 @@ const useWebRTC = (roomID, username) => {
         peer.on('connect', () => {
             console.log('Connected to peer:', userToSignal);
             setPeers(prev => prev.map(p => p.peerID === userToSignal ? { ...p, connected: true } : p));
-            // Send our username
-            peer.send(JSON.stringify({ type: 'username', value: username }));
+
+            // Send our username with retry
+            const sendUsername = () => {
+                try {
+                    peer.send(JSON.stringify({ type: 'username', value: username }));
+                    console.log('Sent username to peer:', userToSignal, username);
+                } catch (err) {
+                    console.error('Error sending username:', err);
+                    // Retry after a short delay
+                    setTimeout(sendUsername, 100);
+                }
+            };
+            sendUsername();
 
             // Send any pending messages
             sendPendingMessages(peer, userToSignal);
@@ -282,8 +293,19 @@ const useWebRTC = (roomID, username) => {
         peer.on('connect', () => {
             console.log('Connected to peer (incoming):', callerID);
             setPeers(prev => prev.map(p => p.peerID === callerID ? { ...p, connected: true } : p));
-            // Send our username
-            peer.send(JSON.stringify({ type: 'username', value: username }));
+
+            // Send our username with retry
+            const sendUsername = () => {
+                try {
+                    peer.send(JSON.stringify({ type: 'username', value: username }));
+                    console.log('Sent username to peer (incoming):', callerID, username);
+                } catch (err) {
+                    console.error('Error sending username:', err);
+                    // Retry after a short delay
+                    setTimeout(sendUsername, 100);
+                }
+            };
+            sendUsername();
 
             // Send any pending messages
             sendPendingMessages(peer, callerID);
@@ -323,9 +345,11 @@ const useWebRTC = (roomID, username) => {
 
             if (parsed.type === 'username') {
                 // Update peer username
+                console.log('Received username from peer:', peerID, parsed.value);
                 const peerObj = peersRef.current.find(p => p.peerID === peerID);
                 if (peerObj) {
                     peerObj.username = parsed.value;
+                    console.log('Updated peer username in ref:', peerID, parsed.value);
                 }
                 setPeers(prev => prev.map(p => p.peerID === peerID ? { ...p, username: parsed.value } : p));
             } else if (parsed.type === 'status') {
